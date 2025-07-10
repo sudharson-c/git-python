@@ -45,37 +45,58 @@ def main():
         print(hashed_content)
     
     elif command=="write-tree" :
-        entries = []
+        index_entries = []
 
         with open(".index","r")as f:
             for line in f:
                 mode,file_name,sha = line.strip().split()
-                entries.append((mode,file_name,sha))
+                index_entries.append((mode,file_name,sha))
         
-        tree_data = b""
+        def write_tree_from_index(index_entries,path_prefix=""):
+            entries = []
 
-        for mode,filename,sha in entries:
-            #"mode <filename>\0<sha>"
-            mode_filename = f"{mode} {filename}".encode()
-            null = b'\x00'
-            raw_sha = bytes.fromhex(sha)
-            entry = mode_filename+null+raw_sha
-            tree_data += entry
+            folders = {}
+            for mode,path,sha in index_entries:
+                if path.startswith(path_prefix):
+                    continue
+                rest = path[len(path_prefix):]
+                if "/" in rest:
+                    entries.append((mode,rest,sha))
+                
+                else:
+                    folder, subpath = rest.split("/",1)
+                    if folder not in folders:
+                        folders[folder] = []
+                    folders[folder].append((mode,path,sha))
 
-        header_tree = f"tree {len(tree_data)}".encode() + b"\x00"
-        full_tree = header_tree + tree_data
+            tree_data = b""
+            for mode,filename,sha in entries:
+                #"mode <filename>\0<sha>"
+                mode_filename = f"{mode} {filename}".encode()
+                null = b"\x00"
+                raw_sha = bytes.fromhex(sha)
+                entry = mode_filename+null+raw_sha
+                tree_data += entry
 
-        tree_sha = hashlib.sha1(full_tree).hexdigest()
+            for folder,folders_entries in folders.items():
+                subtree_sha = write_tree_from_index(index_entries,path_prefix+folder+"/")
+                folder_entry = f"40000 {folder}".encode() + b"\x00"+ bytes.fromhex(subtree_sha)
+                tree_data += folder_entry
 
-        compressed_tree = zlib.compress(full_tree)
-        dir_path_tree = f".git/objects/{compressed_tree[:2]}"
-        file_path_tree = f"{dir_path_tree}/{compressed_tree[2:]}"
+            full_tree = f"tree {len(tree_data)}".encode() + b"\x00" + tree_data
+            tree_sha = hashlib.sha1(full_tree).hexdigest()
+            compressed = zlib.compress(full_tree)
+            dir_path = f".git/objects/{tree_sha[:2]}"
+            file_path = f"{dir_path}/{tree_sha[2:]}"
+            os.makedirs(dir_path, exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(compressed)
 
-        os.makedirs(dir_path_tree,exist_ok=True)
-        with open(file_path_tree,"wb") as f:
-            f.write(compressed_tree)
+            return tree_sha
+
+        root_tree_sha = write_tree_from_index(index_entries)
+        print(root_tree_sha)
         
-        print(tree_sha)
     else:
         raise RuntimeError(f"Unknown command #{command}")
 
