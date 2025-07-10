@@ -62,12 +62,12 @@ def main():
             entry = mode_filename+null+raw_sha
             tree_data += entry
 
-        header = f"tree {len(header)}".encode() + b"\x00"
-        full_tree = header + tree_data
+        header_tree = f"tree {len(tree_data)}".encode() + b"\x00"
+        full_tree = header_tree + tree_data
 
-        tree_sha = hashlib.sha1(full_tree).digest()
+        tree_sha = hashlib.sha1(full_tree).hexdigest()
 
-        compressed_tree = zlib.compress(tree_sha)
+        compressed_tree = zlib.compress(full_tree)
         dir_path_tree = f".git/objects/{compressed_tree[:2]}"
         file_path_tree = f"{dir_path_tree}/{compressed_tree[2:]}"
 
